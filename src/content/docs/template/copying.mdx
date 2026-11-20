@@ -1,0 +1,80 @@
+---
+title: Copying and owning the template
+description: How a product takes the starter template — the copy script, what gets renamed, what must stay in step, and how a copy pulls later template changes.
+---
+
+The template is copied once and then owned. There is no shared package, service, login or
+database, and nothing updates a copy automatically — template changes reach a copy only
+as a reviewed diff.
+
+## A new product
+
+From the Backend Platform repository:
+
+```sh
+scripts/copy-template.sh ../my-product myproduct
+STARTER_TEST_DATABASE_URL=... scripts/copy-template.sh ../x x --verify   # prove the copy builds and passes
+```
+
+The script copies `template/` without its `target/`, renames everything that names the
+template, and writes `TEMPLATE_ORIGIN` with the commit it came from:
+
+| Template | Copy (`NAME` = `myproduct`) |
+|---|---|
+| crates `starter-http`, `-db`, `-accounts`, `-server` | `myproduct-http`, … |
+| `starterctl` | `myproductctl` |
+| variables `STARTER_*` | `MYPRODUCT_*` |
+| roles `starter_owner`, `starter_app` | `myproduct_owner`, `myproduct_app` |
+| cookie `__Host-starter_session` | `__Host-myproduct_session` |
+| `deploy/starter.service`, `/opt/starter`, user `starter` | `myproduct.service`, `/opt/myproduct`, … |
+| compose project `starter-template` | `myproduct` |
+
+Then, by hand:
+
+1. `git init`, push, and turn on the copied CI and Dependabot.
+2. Pick the product's own ports — the template defaults to `61450` for the server,
+   `61433` for the development database, the sibling values for the load and rehearsal
+   scripts (all env-tunable: `STARTER_DEV_PORT`, `STARTER_LOAD_PORT`,
+   `STARTER_REHEARSAL_PORT`, `STARTER_PG_PORT`) — the API-token prefix, and the `From`
+   address. Each product keeps its own port band on the shared machine.
+3. Read the operations guide (`docs/OPERATIONS.md` in the copy) and run every drill once
+   on the product's own stores.
+4. Delete what the product does not use. A product without accounts deletes the accounts
+   crate, its migration, the kit's rows in the protections manifest and the kit's routes.
+
+## An existing product
+
+An existing product takes *pieces*, not the whole workspace — the accept loop and stack,
+the database split, the accounts kit, the host layer, the release and drill scripts, or
+the CI kit — each with what it must be kept in step with. The adoption dry run (against
+Durable Runner) is recorded in the repository's `docs/B1T_ADOPTION.md`.
+
+## What must stay in step
+
+Some pairs are checked by a test or script; the rest are review items on every change:
+
+- **A migration** that adds a table, trigger, function or grant ⇒ the protections
+  manifest (grants row; digests from `…ctl digests`) — checked by every database test.
+- **A configuration variable** ⇒ `deploy/env.example` — checked by a test that refuses
+  drift in either direction.
+- **A new bound** (`// LIMIT(name)`) ⇒ a mutation row in `prove-limits.sh` plus the test
+  that fails without the limit — the script refuses an unpaired marker.
+- **`…_LISTEN`'s port** ⇒ the Caddyfile's upstream — review.
+- **The drain timeout** ⇒ the unit's `TimeoutStopSec` (longer than the drain) — review.
+- **The connection cap** ⇒ `LimitNOFILE` in the unit — review.
+- **The database image digest** ⇒ compose and any CI naming it — `check-pins.sh`.
+- **The Rust toolchain** ⇒ `rust-toolchain.toml` — `check-toolchain.sh`.
+
+## Pulling template changes
+
+A copy never updates itself. To take a later change:
+
+1. Read `TEMPLATE_ORIGIN` for the commit `A` the copy came from.
+2. List what changed since: `git log --oneline A..main -- template/` and
+   `git diff A main -- template/` in the Backend Platform repository.
+3. Decide per change: take it, adapt it, or record why not — the template's decisions
+   document says why each was made.
+4. Apply taken changes as one commit, renamed as the copy is (a scratch
+   `copy-template.sh` run gives the renamed text to diff against).
+5. Run the copy's gate and every affected drill; record misses.
+6. Update `template-commit` in `TEMPLATE_ORIGIN`.

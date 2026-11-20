@@ -1,0 +1,60 @@
+---
+title: The control API, as built in B0
+description: The management API the control plane's spine serves today — routes, idempotency, honest failure answers, and which API to use when.
+---
+
+:::caution[Dev stack only]
+The control plane is **parked**. This API exists and is exercised — by tests, the drill
+and the load scenario — on the [local development stack](/self-hosting/dev-stack/) only.
+It is not a running product. The planned milestones would grow it, not replace it.
+:::
+
+## Which API, when
+
+Two APIs live in this repository, and they are not interchangeable:
+
+- **The accounts API** — what a product's copy of the [starter template](/template/accounts/)
+  serves: sign-up, sessions, workspaces, tokens. This is the API you build *on* today.
+- **The control API** (this page) — the platform's own management surface: desired
+  state, operations, observed status. It manages platform projects, not end users, and is
+  parked with the rest of the plane.
+
+## Authentication and failure
+
+Control-API requests carry `Authorization: Bearer $BP_ADMIN_TOKEN`. Every route can
+answer `503 control_plane_unavailable` when the control database cannot be reached —
+management fails honestly rather than fabricating. In-flight control requests are bounded;
+past the bound the API sheds with `503 overloaded` instead of queueing behind the
+database pool.
+
+## Routes
+
+| Route | What it does |
+|---|---|
+| `GET /livez` | Process liveness |
+| `GET /readyz` | 200 when PostgreSQL answers within a 500 ms probe, else 503 |
+| `PUT /v1/projects/{project}/desired` | Record desired configuration; accepts an optional `Idempotency-Key` (max 128 printable ASCII) — a replayed key returns the recorded operation |
+| `GET /v1/projects/{project}` | Desired + observed state + the latest operation, as one honest view |
+| `GET /v1/operations/{id}` | The operation, its steps, and the derived status |
+| `POST /v1/operations/{id}/retry` | Resume a failed or stalled operation — the same operation, never a new blind retry |
+| `GET /v1/operation-counts` | Admission bound: `429 too_many_operations` past the per-project cap |
+
+```sh
+curl -fsS -X PUT -H "Authorization: Bearer $BP_ADMIN_TOKEN" \
+  -H 'content-type: application/json' -H 'Idempotency-Key: req-42' \
+  -d '{"databases":["main"],"buckets":["files"],"identity":{"clients":["web"]}}' \
+  http://127.0.0.1:61400/v1/projects/shop/desired
+# 202 Accepted — Location: /v1/operations/op_…
+```
+
+A project id is 3–20 lowercase letters/digits starting with a letter. Desired names
+(databases, buckets, OIDC clients) become deterministic provider resource names — which
+is what lets a retried step find and adopt existing work instead of duplicating it.
+
+## What `GET /v1/operations/{id}` tells the truth about
+
+An operation's status is derived from its steps: `partial` when some steps ran and others
+did not, `uncertain` when a reply was lost and reconciliation has not confirmed the
+effect, `failed`/`succeeded`/`running`/`pending` as recorded. A duplicate the worker
+caught — a late create the verification pass found — is reported in the step record, so
+it surfaces through the API rather than being silently adopted.

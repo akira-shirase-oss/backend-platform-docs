@@ -1,0 +1,80 @@
+---
+/**
+ * The changelog: one file per change in src/content/changelog, newest first, grouped by
+ * month. Each entry is a card with an anchor (its file name), its type and the areas it
+ * touches, and the full text. Everything renders without JavaScript.
+ */
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { render } from 'astro:content';
+import { anchorOf, byMonth, changes, dayOf } from '../../lib/changelog';
+
+const entries = await changes();
+const months = byMonth(entries);
+const rendered = new Map(await Promise.all(entries.map(async (entry) => [entry.id, (await render(entry)).Content] as const)));
+---
+
+<StarlightPage
+	frontmatter={{
+		title: 'Changelog',
+		description: 'What changed in the Backend Platform, newest first: features, improvements, fixes, security fixes and breaking changes, each dated and linked to the docs.',
+		tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 2 },
+		pagefind: true,
+	}}
+	headings={months.map((month) => ({ depth: 2, slug: `m-${month.id}`, text: month.label }))}
+>
+	<p class="lede">
+		Every change that reached the Backend Platform's <code>main</code> branch and that you can see or use, newest
+		first. Each entry is dated the day it landed, labelled with its type and the areas it touches, and links to
+		the docs. The project has made no release yet — and the control plane is parked — so entries are grouped by
+		month rather than by version. <a href="/changelog/rss.xml">Subscribe with RSS</a>.
+	</p>
+
+	{
+		months.map((month) => (
+			<section>
+				<h2 id={`m-${month.id}`} class="changelog-month">
+					{month.label}
+				</h2>
+				{month.entries.map((entry) => {
+					const Content = rendered.get(entry.id)!;
+					const id = anchorOf(entry);
+					return (
+						<article class="change" id={id}>
+							<h3>
+								<a class="change-anchor" href={`#${id}`}>
+									{entry.data.title}
+								</a>
+							</h3>
+							<p class="change-chips">
+								<time class="chip" datetime={entry.data.date.toISOString().slice(0, 10)}>
+									{dayOf(entry.data.date)}
+								</time>
+								<span class="chip chip-type">{entry.data.type}</span>
+								{entry.data.areas.map((area) => (
+									<span class="chip">{area}</span>
+								))}
+							</p>
+							<Content />
+							{entry.data.removal && (
+								<p class="change-meta">
+									Stops working on <time datetime={entry.data.removal.toISOString().slice(0, 10)}>{dayOf(entry.data.removal)}</time>.
+								</p>
+							)}
+							{entry.data.docs.length > 0 && (
+								<p class="change-docs">
+									Read more:{' '}
+									{entry.data.docs.map((link, index) => (
+										<>
+											{index > 0 && ' · '}
+											<a href={link.href}>{link.label}</a>
+										</>
+									))}
+								</p>
+							)}
+						</article>
+					);
+				})}
+			</section>
+		))
+	}
+</StarlightPage>

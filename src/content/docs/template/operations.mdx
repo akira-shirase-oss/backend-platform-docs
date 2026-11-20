@@ -1,0 +1,57 @@
+---
+title: Operating a copy
+description: Running the template's service on a droplet — install, secrets, releases, backup and restore, upgrade and rollback, health and load. The operator guide runs as written in CI.
+---
+
+A copy runs on a single droplet under systemd behind Caddy — one always-on process, no
+orchestrator. The full command blocks live in the copy's `docs/OPERATIONS.md`; CI runs
+them as written on an Ubuntu 24.04 VM with systemd (`test-install.sh`), so what is
+written here is what is proven. Examples use `https://app.example.com`.
+
+## Install, in shape
+
+1. **Harden the droplet** — `deploy/harden.sh`: SSH keys only, a firewall admitting 22,
+   80 and 443, unattended upgrades. Its `check` mode fails on each missing step.
+2. **The service's user, settings and secrets** — settings hold no secret; secrets are
+   root-owned `0600` files the unit loads as systemd credentials (`_FILE` paths work too).
+   Every configuration problem reports at once at startup, never one at a time.
+3. **The roles and the database** — as the administrator, `…ctl bootstrap` creates the
+   owner and runtime roles and the database; the owner migrates (`…ctl migrate`); the
+   service runs as the runtime role. The administrator's URL is removed afterwards:
+   nothing that runs needs it. On Neon, `sslmode=verify-full`.
+4. **Bounded logs, the unit, the first release** — journald retention is capped; the
+   unit's exposure measures 1.4 (`check-unit.sh` fails above 2.0); the release is
+   migrated, checked, activated and started through `deploy.sh`.
+5. **Caddy in front** — TLS, HSTS, request bounds, the upstream on loopback only.
+
+## Releases, upgrade, rollback
+
+Releases land under a versioned prefix; `deploy.sh` activates atomically and *refuses* a
+release whose schema is not current. At startup the binary serves only on exactly its own
+schema — a wrong role, a foreign schema or a weakened protections manifest exits before
+any socket opens. Rolling back past a migration means restoring the pre-upgrade snapshot,
+which loses writes made since; `rollback.sh` refuses while the target binary does not
+know the schema. The 23-step rehearsal (`upgrade-rehearsal.sh`) proves the whole arc —
+install vN with data, upgrade to vN+1, verify, roll back, verify again — in the gate.
+
+## Backup and restore
+
+One drill per store, each run by the gate: PostgreSQL (`pg_dump`, encrypted off-site with
+age, the key itself restored from its backup before decrypt), SQLite, and an append-only
+journal (proven against Durable Runner's binaries). The Neon and bucket drills are
+written but not yet run — the repository holds no credentials for either. Each drill
+fails on a weakened source and on a wrong key backup: a restore that cannot happen is
+found in the drill, not in an emergency.
+
+## Health and observability
+
+`/livez` answers the process; `/readyz` answers the database within its deadline or 503s;
+`/errorz` reports configuration problems. Logs are JSON with request ids, journald keeps
+a bounded window, and the alert wiring is a per-deployment choice.
+
+## Load
+
+`MODE=smoke|full scripts/load.sh` runs the service scenario (90% token-authenticated
+workspace reads, 10% liveness) at a constant arrival rate — smoke is 100,000 requests,
+full is the workspace-standard 1,000,000. Results record the machine, commit and load
+average; misses are kept as evidence, never re-run until green.

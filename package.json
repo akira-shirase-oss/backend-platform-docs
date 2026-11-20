@@ -1,0 +1,22 @@
+{
+  "name": "backend-platform-docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Documentation for the Backend Platform: the copy-and-own starter template, the parked control plane's design and evidence, self-hosting and operations, and the changelog.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.17"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && node scripts/csp-hashes.mjs && node scripts/check-dist.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/rss": "4.0.19",
+    "@astrojs/starlight": "0.42.8",
+    "astro": "7.4.5",
+    "starlight-links-validator": "0.27.0"
+  }
+}

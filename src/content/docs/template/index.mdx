@@ -1,0 +1,50 @@
+---
+title: What the starter template is
+description: The copy-and-own Rust service skeleton — what it contains, why it exists, and where it stands.
+---
+
+The starter template (milestone B1-T) is a small Rust service a product copies once and
+then owns: a bounded HTTP layer, PostgreSQL with an owner/runtime role split and a
+protections manifest, a copy-and-own accounts kit, the health contract, the host layer,
+release and restore scripts, and the CI and evidence kit. It lives in the Backend
+Platform repository under `template/` — its home because the repository's CI and evidence
+kit already exercises it — and a copy depends on nothing here: no shared package,
+service, login or database.
+
+## Why it exists
+
+The project's first milestone answered a question with evidence: do the sibling products
+need a *platform*, or do they repeat the same slice of work? The memo's finding was the
+slice — invite-gated sign-up, email verification, sessions, workspaces, members and
+roles, API tokens, plan limits, deletion — while the independence rule (no product may
+depend on a shared service) keeps a running platform from supplying it. The accepted
+recommendation: stay parked, and ship the slice as code each product copies — the same
+model they already use for UI code.
+
+## What a copy contains
+
+| Piece | What it is |
+|---|---|
+| `starter-http` | The bounded accept loop (connection cap *before* accept, header-read and idle timeouts, write-stall deadline, per-connection and lifetime caps, drain deadline) and the middleware stack (request ids, one error envelope, panics as 500s, request deadline, body limits, load shedding) |
+| `starter-db` | The bounded pool, the owner/runtime role split, the startup gate (role → schema → protections manifest), binary/schema compatibility, fingerprints, the log-capture check |
+| `starter-accounts` | The accounts kit: invite-gated sign-up, verification and reset through a mail port, sessions, sign-in budgets, workspaces, members and roles, API tokens, plan limits at admission, deletion |
+| `starter-server` | Typed configuration (secrets from systemd credentials or owner-only files), the health routes, the wiring, the `starterctl` operator tool |
+| `deploy/` | The hardened systemd unit (exposure 1.4), Caddy with TLS and bounds, journald retention, `env.example`, `harden.sh`, the development compose file |
+| `scripts/` | The gate, the stack and dev loops, the restore drills, the upgrade rehearsal, `deploy.sh`/`rollback.sh`, `prove-limits.sh`, `load.sh`, pinned installers |
+| `.github/` | The copy's own CI (SHA-pinned actions, daily) and Dependabot file |
+
+It is an HTTP API with **no web interface** — a product's sign-in pages and dashboard are
+its own, built on its copy of the workspace UI kit.
+
+## Where it stands
+
+Built and proven: the accounts kit, host layer (run on a CI VM with systemd), configuration
+and secrets, releases and the schema gate, the health contract, the PostgreSQL, SQLite and
+journal restore drills, the upgrade rehearsal (23 steps), the CI and evidence kit with 16
+proven limits, the observability minimum, and upkeep.
+
+Owed: the acceptance run — a product adopting a copy on a fresh droplet, timed against a
+hand baseline; the Neon and bucket restore drills (no credentials yet); and a
+quiet-machine load run (now dispatches to CI — see [the evidence kit](/template/evidence/)).
+
+Next: [copy a template](/template/copying/), or read the [accounts API](/template/accounts/).

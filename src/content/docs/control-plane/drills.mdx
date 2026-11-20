@@ -1,0 +1,46 @@
+---
+title: Drills and evidence
+description: The partial-provisioning drill — the faults the fake provider injects, what the drill proves, and where the load evidence stands.
+---
+
+The project's contract requires four failure cases to be drills, not aspirations, and
+milestone B0 practiced the hardest one first: provisioning that stops partway.
+
+## The partial-provisioning drill
+
+`scripts/drill.sh partial-provision` schedules thousands of provisioning operations
+against the fault-injecting fake provider while the worker claims steps under leases —
+concurrently, and through `kill -9` on the worker between steps. The injected faults:
+
+- **fail-before-effect** — the call reports failure; nothing was created;
+- **lost replies** — the create happened; the reply never arrived;
+- **late creates** — the call appeared to time out absent; the resource lands later;
+- **hangs** — the call never returns inside its deadline.
+
+The drill's pass conditions: every operation reaches a recorded terminal or resumable
+state; every create is verified by name; **zero duplicated resources and zero orphans**;
+and a duplicate the reconciliation pass catches is *reported*, never silently adopted.
+The `kill_drill` test builds the worker with its fault-injection flag and kills it
+mid-operation so step resumption is proven under a real crash, not just a lease expiry.
+
+## Why this drill comes first
+
+Provisioning has no cross-provider transaction, so a crash mid-operation is the normal
+failure mode, not an edge. The drill exists before a second adapter by rule — a real
+provider integration is added only after partial provisioning is practiced on the fake,
+because the reconciler's adopt-or-compensate behavior is what a real provider's outages
+will exercise.
+
+## The load evidence, honestly
+
+`MODE=smoke|full scripts/load.sh` runs the control-API scenario — 80% project reads, 20%
+desired-state writes across 2,000 projects at a seeded 0.1% provider fault rate — and
+records the machine, commit, load average and thresholds. Two 100,000-request smokes
+were run on a busy laptop and **missed thresholds**; both results remain committed under
+`perf/results/` as evidence, and they are not capacity claims.
+
+Still owed: a quiet-machine smoke and the 1,000,000-request full run. Both are now
+dispatchable to GitHub-hosted runners through the repository's `load-full.yml` workflow —
+one job per scenario (the control-API smoke, the control-API 1M run, the template's
+service load), runner CPU recorded in the result, results uploaded as artifacts even on
+failure because a miss is evidence too.

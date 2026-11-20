@@ -1,0 +1,58 @@
+---
+title: Concepts
+description: The ideas every page assumes — desired versus observed state, reconciled provisioning, honest status, bounded everything, least privilege, and copy-and-own.
+---
+
+Six ideas shape everything the Backend Platform builds — the control plane that exists as
+a tested spine, and the starter template a product can copy today.
+
+## Desired state is not observed state
+
+The control database stores what the organization *wants* (desired configuration);
+providers report what actually *exists* (observed state). Status is a derived join of the
+two, never a cache of the last instruction. A database that was created but whose reply
+was lost is `uncertain`, not `succeeded`; a half-finished provision is `partial`, shown
+as exactly that. `partial`, `uncertain` and `unknown` are first-class outcomes, never
+smoothed into a green board.
+
+## Provisioning is reconciled, never atomic
+
+There is no cross-provider transaction, so operations carry an ID and recorded steps
+claimed under leases. Provider resource names are deterministic — derived from the
+project and the resource — so a retried step finds what exists and adopts it instead of
+creating a second database. Every create is verified by name afterward: a create that
+lands *late* (after its deadline, after the lookup answered "absent") is caught, reported
+as a duplicate, and never silently adopted. The rule is **reconcile or compensate, never
+a blind retry**.
+
+## Status is honest under degradation
+
+A dead control UI, API, worker or database must not stop running applications — the
+control plane is not in their request path. Management degrades instead: the API answers
+`503 control_plane_unavailable`, the console (when built) shows "cannot manage" with the
+time of last observed state. Fabricated success is a worse failure than an honest outage.
+
+## Everything is bounded
+
+Every operation, queue, body, retry loop, pool and budget has a limit and a deadline.
+In the platform: in-flight control requests shed past a bound rather than queue behind a
+database connection pool. In the template: a connection cap taken *before* `accept`,
+header-read and idle timeouts, write-stall deadlines, sign-in budgets, mail budgets —
+each proven by a test that fails when the bound is removed.
+
+## Least privilege — including inside the platform
+
+The provider admin credentials are root-equivalent over every project, so they exist in
+exactly one place: the reconciler worker, which opens no listening socket. The API
+process holds none and does not link the adapters; an administrator's URL is used at
+setup and removed. Databases use a three-role split — an administrator, an owner that
+migrates, and a runtime role that can read and write rows but cannot rewrite append-only
+logs or the protections manifest.
+
+## Copy and own beats depend-on-me
+
+The sibling products each need the same slice — invite-gated sign-up, verification,
+sessions, workspaces, tokens — and none may depend on a shared service. So the slice is
+*code*: the starter template, copied once into a product and then owned. Updates reach a
+copy only as a reviewed diff. This is the same model the products already use for shared
+UI code — the alternative to a platform for the problem that actually repeats.

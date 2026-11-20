@@ -1,0 +1,50 @@
+---
+title: Introduction
+description: What the Backend Platform is, what exists today, and how these docs are organized.
+---
+
+The Backend Platform is a self-hosted control plane in the Appwrite/Supabase direction:
+one developer experience over deployment, identity, data, files, jobs and diagnostics,
+assembled from proven components rather than rewritten infrastructure. Its purpose is to
+make small applications easier to *operate* — provisioning is a reconciled process,
+running applications outlive the control plane, and upgrade, restore and export are
+rehearsed drills, not runbook folklore.
+
+## Honest status
+
+The project is **parked**: the maintainer has not yet decided to build the control plane
+(the "unpark" question is open). What exists in the repository today was built to answer
+the "is a platform worth it" question with evidence rather than enthusiasm:
+
+- **B0 — the spine (built and green).** The control API, the reconciler worker and its
+  append-only operation log, the fault-injecting fake provider, and the
+  partial-provisioning drill. The milestone's own evidence memo recommended *staying
+  parked* and meeting the need differently — the recommendation was accepted.
+- **B1-T — the starter template (in progress).** A copy-and-own Rust service skeleton:
+  a bounded HTTP layer, a hardened PostgreSQL split, an accounts kit, the health
+  contract, releases, restore drills and the CI + evidence kit. A product copies it once
+  and owns it. Everything except its final acceptance run on a droplet is built and proven.
+
+The control-plane milestones B1–B7 are **planned, not built** — described here honestly
+as plans in [Control plane](/control-plane/). Nothing in these docs presents the parked
+platform as runnable product.
+
+## What it is not
+
+Not a shared login or account service for the sibling products (Colophon, Service
+Monitor, Durable Runner). Those products keep their own accounts and databases and are
+not tenants of this platform; the accounts-work they share is why the *template* exists —
+code each copies, not a service they depend on.
+
+## How these docs are organized
+
+- **Getting started** — the [quick start](/quick-start/) (the template, end to end, on
+  your machine) and the [concepts](/concepts/) every page assumes.
+- **Starter template** — what it is, how to [copy and own](/template/copying/) it, its
+  [accounts API](/template/accounts/), how to [operate a copy](/template/operations/) on a
+  droplet, and [the evidence](/template/evidence/) a copy inherits.
+- **Control plane (planned)** — the design, the [control API](/control-plane/api/) as B0
+  built it, the [drills and evidence](/control-plane/drills/) and the
+  [threat model](/control-plane/threat-model/).
+- **Self-hosting** — the [development stack](/self-hosting/dev-stack/).
+- **[Changelog](/changelog/)** — every change that reaches `main`, newest first.

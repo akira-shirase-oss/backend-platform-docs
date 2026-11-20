@@ -1,0 +1,97 @@
+---
+title: Quick start
+description: Run the starter template locally, end to end — database, service, a verified account, a workspace, and an authenticated API call with a token. Runs on your machine (labelled local).
+---
+
+This quick start runs the **starter template** — the part of the project a product can
+use today — on your own machine, and ends with a real API call authenticated by a
+workspace token. Everything below runs locally against `127.0.0.1` on the project's port
+band (`61400–61499`); no external service is touched.
+
+You need Docker, `rustup` (the pinned toolchain installs itself from
+`rust-toolchain.toml`), `curl`, `jq` and `python3`. The commands run inside the
+Backend Platform repository's `template/` directory — the template's home today; a
+product's copy runs the identical commands inside its own repository.
+
+## 1. Start the database
+
+```sh
+scripts/stack.sh up        # PostgreSQL 18 in Docker, published on 127.0.0.1:61433
+```
+
+`stack.sh up` waits for the container to report healthy. To use a PostgreSQL 18 you
+already administer instead, export `STARTER_TEST_DATABASE_URL` (an administrator's URL)
+first; `up` then starts nothing.
+
+## 2. Build and run the service
+
+```sh
+scripts/dev.sh start       # build, create and migrate starter_dev, start the server
+curl -fsS http://127.0.0.1:61450/readyz
+# {"database":"ok","status":"ready"}
+```
+
+`dev.sh start` does what production does: an administrator creates the owner and runtime
+roles and the database, the owner role migrates, the server runs as the runtime role —
+which can read and write rows but cannot rewrite its own protections. A fake SMTP sink
+starts beside it on port `61457` so mail never leaves the machine.
+
+## 3. Sign up a verified account
+
+Sign-up is invite-gated; `dev.sh invite` prints a fresh code from the dev database:
+
+```sh
+invite=$(scripts/dev.sh invite)
+curl -fsS -H 'content-type: application/json' \
+  -d "{\"invite\":\"$invite\",\"email\":\"you@example.test\",\"password\":\"a long dev password\"}" \
+  http://127.0.0.1:61450/v1/signup
+# {"user_id":"…","verification_email":"sent"}
+```
+
+The service mailed a verification link to the fake sink. Read it back and verify:
+
+```sh
+verify=$(scripts/dev.sh mail | tail -1 | sed 's/.*token=//')
+curl -fsS -o /dev/null -w '%{http_code}\n' -H 'content-type: application/json' \
+  -d "{\"token\":\"$verify\"}" http://127.0.0.1:61450/v1/verify
+# 204
+```
+
+## 4. Sign in, create a workspace and an API token
+
+```sh
+curl -fsS -c cookies.txt -H 'content-type: application/json' \
+  -d '{"email":"you@example.test","password":"a long dev password"}' \
+  http://127.0.0.1:61450/v1/session        # sets the __Host- session cookie
+
+workspace=$(curl -fsS -b cookies.txt -H 'content-type: application/json' \
+  -d '{"name":"My first"}' http://127.0.0.1:61450/v1/workspaces | jq -r '.id')
+
+token=$(curl -fsS -b cookies.txt -H 'content-type: application/json' \
+  -d '{"name":"first"}' "http://127.0.0.1:61450/v1/workspaces/$workspace/tokens" | jq -r '.token')
+```
+
+The token is shown exactly once — this is the only time its value is readable. It is
+stored as a SHA-256 digest and its display prefix identifies it in lists.
+
+## 5. The authenticated call
+
+```sh
+curl -fsS -H "Authorization: Bearer $token" \
+  "http://127.0.0.1:61450/v1/workspaces/$workspace/hello"
+# {"message":"hello, workspace …","role":"owner"}
+```
+
+That response travelled the whole stack a production copy uses: the bounded accept loop,
+the middleware envelope, the token's digest lookup, the workspace access check — the same
+path the load scenario exercises a million times over.
+
+## 6. Stop, and (optionally) run the gate
+
+```sh
+scripts/dev.sh stop
+scripts/check.sh     # the whole gate as CI runs it: fmt, clippy, tests, drills, pins
+```
+
+Next: [Accounts kit API](/template/accounts/) for every route and rule, and
+[Operating a copy](/template/operations/) for the same service on a droplet with TLS.

@@ -1,0 +1,65 @@
+---
+title: The control plane, as planned
+description: B0 — the spine that exists and is proven — and B1–B7, the parked milestones, described honestly as plans.
+---
+
+:::caution[Parked]
+The control-plane milestones **B1–B7 are planned, not built.** The maintainer has not
+decided to build the platform; this page describes the plan and what milestone B0 already
+proved. Nothing here is a runnable product beyond the dev stack.
+:::
+
+## B0 — the spine (built and green)
+
+Milestone 0 exists to answer "is a platform worth it" with evidence. It built the minimum
+that every later milestone depends on:
+
+- **`platform-domain`** — the pure domain: identities, plans, the operation state
+  machine, deterministic resource naming. No I/O, enforced in CI.
+- **`platform-db`** — the control database: desired and observed state, the append-only
+  operation log, leased step claims. An administrator bootstraps it; `platform_owner`
+  migrates; `platform_app` (the runtime role) can read and write rows but cannot rewrite
+  the log.
+- **`platform-server`** — the control API (see [the API](/control-plane/api/)). It links
+  no adapter, worker or fake-provider code and reads no provider setting — provider
+  credentials can never enter the API process.
+- **`platform-worker`** — the reconciler: claims operation steps under leases, executes
+  them against the adapters, verifies every create by name, reports duplicates.
+- **`platform-fake-provider`** and **`platform-adapters`** — the fake control-plane
+  provider (seeded faults: fail-before-effect, lost replies, late creates, hangs) and the
+  adapter interface real providers would implement.
+- **The partial-provisioning drill** — the contract's hardest failure case, practiced on
+  day one (see [Drills and evidence](/control-plane/drills/)).
+- **CI and the load scenario** — from the first commit: architecture and pin checks, a
+  short load probe in the gate, and `MODE=smoke|full scripts/load.sh` for the
+  million-request runs.
+
+B0 is green. Still owed: a quiet-machine smoke and the 1,000,000-request run — both now
+dispatchable to hosted runners through the repository's load workflow; the two existing
+100k smokes were run on a busy laptop, missed thresholds, and remain committed as
+evidence, not capacity claims.
+
+## B1–B7 — planned, not built
+
+| Milestone | What it would build | Status |
+|---|---|---|
+| B1 | The organization's console: projects, the first real provisioning flow | **planned — parked** |
+| B2 | Identity: an OIDC layer a project's own users sign in through | **planned — parked** |
+| B3 | Databases as a managed resource for project workloads | **planned — parked** |
+| B4 | Storage/buckets | **planned — parked** |
+| B5 | Functions/jobs | **planned — parked** |
+| B6 | Diagnostics and the operations surface | **planned — parked** |
+| B7 | Ship gate: upgrades, restores, exports, the final drills | **planned — parked** |
+
+Each milestone's proof gate precedes the next, and a status cell says *Done* only with
+named tests and evidence — the roadmap's rule.
+
+## Why it is parked
+
+B0's own evidence memo concluded the sibling products repeat a *slice* — invite-gated
+accounts, sessions, workspaces, tokens — that their independence rule forbids a shared
+service from supplying. The recommendation to stay parked and ship the slice as the
+copy-and-own starter template was accepted (with corrections) by the maintainer. The
+platform's design is recorded in the repository's architecture and decisions documents;
+if the maintainer unparks, B1 picks up where B0 left off — the spine, drill and load
+scenario already exist to be built on.

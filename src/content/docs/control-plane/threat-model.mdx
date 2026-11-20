@@ -1,0 +1,45 @@
+---
+title: The control-plane threat model
+description: The ten threats the control plane is designed against — the credential rule at its center, and the risks it accepts on purpose.
+---
+
+The architecture document's threat model (T1–T10) shapes what B0 already builds; the
+parked milestones inherit it. This page is the condensed picture.
+
+## The center: provider credentials live only in the worker
+
+A provider admin credential is root-equivalent over every project's resources, so its
+placement is the model's load-bearing rule:
+
+- **Only `platform-worker` links the adapters** and reads the provider settings. The
+  worker opens no listening socket — there is nothing to reach.
+- **`platform-server` links no adapter, worker or fake-provider code and reads no
+  `BP_PROVIDER*` setting** — enforced by the architecture check in CI, not by review.
+- The administrator's database URL is used at setup to create the owner and runtime
+  roles, then removed; nothing that runs holds it.
+
+An attacker in the API process finds no credential and no code path that would use one.
+
+## The threats, condensed
+
+| Threat | The design answer |
+|---|---|
+| T1 — credential theft via the API | The API holds no provider credentials (above) |
+| T2 — blind retry duplicates resources | Deterministic names, step leases, verify-by-name; duplicates are reported, never adopted |
+| T3 — a transaction spans a provider call | Intent commits to the operation log first; no database transaction spans a provider call |
+| T4 — secrets in logs | No secrets, tokens or app payloads in logs — a log-capture test runs over every drill |
+| T5 — the control DB is the bottleneck/bomb | Bounded queues and admission (`429`/`503` under pressure); in-flight caps shed rather than queue |
+| T6 — stale worker / lease confusion | Steps are claimed under leases; a dead claim expires and another worker resumes the same step |
+| T7 — fabricated status | Status is derived from desired + observed; `partial`/`uncertain`/`unknown` are first-class answers |
+| T8 — supply chain | Every CI action SHA-pinned, every container image digest-pinned; `check-pins.sh` proves it |
+| T9 — runtime role rewriting history | The operation log is append-only; the runtime role cannot rewrite it (three-role split) |
+| T10 — one project's blast radius | Per-project principals, roles, storage paths, secrets, network boundaries; audit rows are append-only |
+
+## Accepted risks
+
+- The fake provider approximates real providers; provider-specific fault shapes are
+  future drill work when a real adapter lands.
+- The dev stack's credentials are public development values — they are never valid
+  anywhere else and the ports bind loopback only.
+- A single-worker deployment serializes reconciling; the model permits concurrent workers
+  but the drill is the proof, not the plan.

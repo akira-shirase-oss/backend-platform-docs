@@ -1,0 +1,44 @@
+---
+title: The evidence kit
+description: What a copy inherits beyond code — the gate, limits proven by removal, drills with records, and the load scenario.
+---
+
+A copy inherits the template's evidence machinery, not just its code. The standard: every
+claim names the test that proves it, every limit has a test that fails when the limit is
+removed, and every run — passing or missing — is recorded, kept, never re-run until green.
+
+## The gate
+
+`scripts/check.sh` runs what the copy's CI runs: the toolchain pin, `fmt`, `clippy -D
+warnings`, the architecture check (`starter-domain` carries no I/O, `starter-http` no
+database), the pin check (every image by digest, every action by SHA), help and README
+tests (every script answers `--help` and refuses unknown arguments; the README's
+quickstart runs as written), all tests, the restore drills with their controls, the
+upgrade rehearsal, and `cargo deny`.
+
+Each check is *shown able to fail* — the gate feeds the architecture and pin checks bad
+inputs and requires them to refuse.
+
+## Limits proven by removal
+
+Sixteen bounds are marked `// LIMIT(name)` in the source. `scripts/prove-limits.sh`
+applies one substitution per marker in a scratch copy and requires the named test to fail
+*as a test* — a build error is not a proof. A marker without a mutation, or a mutation
+without its marker, fails the script. Examples: the connection cap before `accept`, the
+sign-in budgets, the per-workspace plan limits, the request deadline, the body limit.
+
+## Drills with records
+
+Drill records live under `perf/results/` with the commit and the machine's load —
+never the machine's name: the limit proofs (16 of 16), the PostgreSQL, SQLite and
+Durable-Runner-journal restore drills, and the 23-step upgrade rehearsal. The existing
+records come from a busy development machine and say so; they record steps and
+pass/fail, not capacity.
+
+## The load scenario
+
+`perf/scenarios/service.js`: 90% token-authenticated workspace reads, 10% liveness,
+constant arrival rate, with thresholds that fail the run. `TOTAL=N` makes a plumbing
+probe kept out of `perf/results`. The owed quiet-machine full run (1,000,000 requests)
+now runs on a hosted runner through the repository's dispatchable load workflow —
+`MODE=full scripts/load.sh` — alongside the control-API smoke and 1M runs.

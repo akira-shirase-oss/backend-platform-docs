@@ -1,0 +1,62 @@
+---
+title: The development stack
+description: Running the control-plane spine locally — the stack script, the port band and its parameters, the gate, and the load script. Local only.
+---
+
+Everything on this page runs **locally**: every port binds `127.0.0.1`, the credentials
+are public development values, and nothing here is a deployment target.
+
+## Up, down, reset
+
+```sh
+scripts/stack.sh up        # PostgreSQL 18 in Docker (compose project backend-platform)
+scripts/stack.sh env       # the development URLs and token the other scripts use
+scripts/stack.sh down
+scripts/stack.sh reset     # a fresh control database
+```
+
+`stack.sh up` waits for health; `stack.sh env` prints `BP_DATABASE_URL`,
+`BP_ADMIN_TOKEN` and friends for the local run.
+
+## The port band — every bound port is a parameter
+
+The platform's processes and its database stay inside the workspace's port band,
+`61400–61499` (each product keeps its own band on the shared machine). Defaults:
+
+| Port | Parameter | What binds it |
+|---|---|---|
+| `61432` | `BP_PG_PORT` | the development PostgreSQL |
+| `61400` | `BP_SERVER_PORT` | the control API |
+| `61410` | `BP_FAKE_PORT` | the fake provider |
+
+`scripts/load.sh`, `scripts/stack.sh`, `deploy/compose.yaml` and CI all read the
+parameters; `scripts/check-ports.sh` (wired into the gate and CI) scans every file that
+binds or references a port and fails on a literal outside the band — and the gate feeds
+it out-of-band samples to prove it refuses. The template's ports have the same treatment
+(`STARTER_PG_PORT` 61433, `STARTER_DEV_PORT` 61450, plus its load/rehearsal/mail ports).
+
+## The gate
+
+```sh
+scripts/check.sh
+```
+
+Runs what CI runs: toolchain pin, `fmt`, `clippy -D warnings` (also on the
+fault-injection build), the architecture checks (the domain carries no I/O; the server
+links no adapter and reads no `BP_PROVIDER*`), the pin check, the port check, tests,
+the partial-provision drill, a short load probe, and `cargo deny` — each shown able to
+fail, and the template's own gate afterward.
+
+## Load runs
+
+```sh
+MODE=smoke scripts/load.sh    # 100,000 requests
+MODE=full  scripts/load.sh    # 1,000,000 — quiet machine only (load average under ~6)
+TOTAL=1000 scripts/load.sh    # a plumbing probe; writes under target/, not perf/results/
+```
+
+Every run creates a fresh control database, starts the fake provider, server and worker,
+waits for readiness, runs k6, waits for convergence, checks the provider inventory for
+duplicates, and records the machine, commit and load. A run taken on a busy machine says
+so in its result — see [Drills and evidence](/control-plane/drills/) for where the
+quiet runs now live.

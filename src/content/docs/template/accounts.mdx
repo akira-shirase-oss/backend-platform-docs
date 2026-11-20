@@ -1,0 +1,89 @@
+---
+title: Accounts kit API
+description: Every route the copy-and-own accounts kit mounts under /v1 — sign-up, verification, sessions, workspaces, members, tokens — with its secrets, budgets and deletion rules.
+---
+
+The accounts kit mounts under `/v1` on the copy's server. A product route authorizes a
+call with `Accounts::access(&headers, workspace, Action::Read)`; anything the caller may
+not see is a **404** so workspace ids cannot be probed, an API token reaches only its own
+workspace and only reads, and everything else needs a person's session
+(`403 session_required`). The examples use `https://app.example.com` — your copy's
+address.
+
+## Sign-up, verification, reset
+
+| Route | Body | Who | Result |
+|---|---|---|---|
+| `POST /v1/signup` | `{invite, email, password}` | anyone with an invite | `201` `{user_id, verification_email: sent\|failed}`; `403 invite_invalid`; `409 email_taken`; `422 weak_password` (under 12 chars), `password_too_long` (over 512 bytes), `invalid_email` |
+| `POST /v1/verify` | `{token}` | the link's holder | `204`; `400 token_invalid` — unknown, used or expired, one answer |
+| `POST /v1/verify/resend` | `{email}` | anyone | `202` always; an unverified account gets a fresh link |
+| `POST /v1/password-reset` | `{email}` | anyone | `202` always; an existing account gets a one-hour link |
+| `POST /v1/password-reset/confirm` | `{token, password}` | the link's holder | `204`; every session and trusted address ends |
+
+## Sessions and the account
+
+| Route | Who | Result |
+|---|---|---|
+| `POST /v1/session` `{email, password}` | anyone | `200` + the session cookie; `401 sign_in_failed` (wrong password and unknown account alike, after the same work); `403 email_unverified`; `429 rate_limited` with `Retry-After` |
+| `DELETE /v1/session` | a person | `204`, cookie cleared |
+| `GET /v1/me` | a person | email, verification, workspaces with roles |
+| `DELETE /v1/me` `{password}` | a person, re-authenticated under the sign-in budgets | `204`; `409 transfer_ownership_first` while they solely own a shared workspace |
+
+## Workspaces, members, tokens
+
+| Route | Who | Result |
+|---|---|---|
+| `POST /v1/workspaces` `{name}` | a person | `201`; `403 plan_limit` (`owned_workspaces`) |
+| `GET /v1/workspaces/{id}` | members; the workspace's API tokens | name, plan, role |
+| `DELETE /v1/workspaces/{id}` | owners | `204`; members and tokens go with it |
+| `GET /v1/workspaces/{id}/members` | members | the member list |
+| `POST /v1/workspaces/{id}/members` `{email, role}` | admins (owners for `owner`) | a verified account joins; `404` for none; `409 already_member`; `403 plan_limit` (`members`) |
+| `DELETE /v1/workspaces/{id}/members/{user}` | admins, or the member themself | `409 last_owner`; an admin cannot remove an owner |
+| `GET /v1/workspaces/{id}/tokens` | admins | id, display prefix, name, created, last used — never the secret |
+| `POST /v1/workspaces/{id}/tokens` `{name}` | admins | `201` with the token, shown once; `403 plan_limit` (`tokens`) |
+| `DELETE /v1/workspaces/{id}/tokens/{token}` | admins | `204` |
+
+```sh
+curl -fsS -H "Authorization: Bearer $TOKEN" https://app.example.com/v1/workspaces/$WORKSPACE/hello
+```
+
+## Secrets and sessions
+
+- Invite codes (`inv_` + 160 bits), email-link tokens and session ids (256 bits), API
+  tokens (`st_` + a 12-character display prefix + 160 bits) come from the OS random
+  source and are stored only as SHA-256 digests. Passwords are Argon2id PHC strings.
+- The session cookie is `__Host-<name>_session`: `HttpOnly`, `SameSite=Strict`, `Secure`,
+  `Path=/`, no domain. Sessions end after an idle window or a maximum age; each is touched
+  at most once a minute.
+- Request bodies are JSON with unknown fields refused, so a cross-site form cannot send
+  one without a preflight — and the cookie is not sent cross-site anyway.
+- Mail goes through the `MailTransport` port. The template's adapter speaks plain SMTP to
+  a relay on loopback and refuses any other address; the relay forwards to the provider
+  over TLS. A product preferring a provider's HTTP API writes a second adapter. With no
+  relay configured, mail is disabled and sign-up reports `verification_email: failed`.
+
+## Budgets
+
+| Budget | Shape | What it bounds |
+|---|---|---|
+| sign-in, per address (IPv4, IPv6 /64, a trusted proxy's hop) | 5, then one per 12 s | guesses from one place; a right password gives the token back |
+| sign-in, global | 20, then one per 3 s | a distributed flood: only (user, address) pairs with no success in 30 days pay |
+| trusted pairs | 30 days from a success | a flood cannot lock the owner out of a place they use |
+| password work | 2 Argon2 jobs at once, 2 s wait | CPU; past the wait, `503 overloaded` |
+| mail, per address / global | 3 then one per 2 min / 30 then one per 10 s | mail one client, or all clients, can cause |
+
+Per-address tables hold at most 16,384 addresses; a full table forgets refilled buckets
+first, then the fullest — churn never forgives a throttled address.
+
+## Plan limits and deletion
+
+Plan limits (`members`, `tokens`, `owned_workspaces`; `…_PLAN_*` settings) check at
+admission, in the same transaction as the insert they bound, under a row lock — so
+concurrent requests at the edge admit exactly the limit, never limit-plus-one.
+
+Deleting a workspace removes its members and tokens. Deleting an account removes its
+sessions, memberships, email links, trusted addresses and the workspaces it alone
+belonged to; its invite, workspace and token references clear. The security log
+(`account_events`: kind, ids, time — never an email, name or address) is append-only,
+even for its owner, and keeps the id, which then resolves to nobody;
+`…ctl prune-events DAYS` bounds it (owner only, at least 30 days).
