@@ -11,12 +11,14 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && node scripts/csp-hashes.mjs && node scripts/check-dist.mjs",
+    "test": "node scripts/snippets.mjs --coverage",
+    "snippets": "node scripts/snippets.mjs",
     "preview": "astro preview"
   },
   "dependencies": {
     "@astrojs/rss": "4.0.19",
     "@astrojs/starlight": "0.42.8",
-    "astro": "7.4.5",
+    "astro": "^7.4.13",
     "starlight-links-validator": "0.27.0"
   }
 }
