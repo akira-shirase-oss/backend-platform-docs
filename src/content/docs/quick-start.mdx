@@ -15,7 +15,7 @@ product's copy runs the identical commands inside its own repository.
 
 ## 1. Start the database
 
-```sh
+```sh run=quickstart
 scripts/stack.sh up        # PostgreSQL 18 in Docker, published on 127.0.0.1:61433
 ```
 
@@ -25,7 +25,7 @@ first; `up` then starts nothing.
 
 ## 2. Build and run the service
 
-```sh
+```sh run=quickstart
 scripts/dev.sh start       # build, create and migrate starter_dev, start the server
 curl -fsS http://127.0.0.1:61450/readyz
 # {"database":"ok","status":"ready"}
@@ -40,7 +40,7 @@ starts beside it on port `61457` so mail never leaves the machine.
 
 Sign-up is invite-gated; `dev.sh invite` prints a fresh code from the dev database:
 
-```sh
+```sh run=quickstart
 invite=$(scripts/dev.sh invite)
 curl -fsS -H 'content-type: application/json' \
   -d "{\"invite\":\"$invite\",\"email\":\"you@example.test\",\"password\":\"a long dev password\"}" \
@@ -50,7 +50,7 @@ curl -fsS -H 'content-type: application/json' \
 
 The service mailed a verification link to the fake sink. Read it back and verify:
 
-```sh
+```sh run=quickstart
 verify=$(scripts/dev.sh mail | tail -1 | sed 's/.*token=//')
 curl -fsS -o /dev/null -w '%{http_code}\n' -H 'content-type: application/json' \
   -d "{\"token\":\"$verify\"}" http://127.0.0.1:61450/v1/verify
@@ -59,7 +59,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' -H 'content-type: application/json' \
 
 ## 4. Sign in, create a workspace and an API token
 
-```sh
+```sh run=quickstart
 curl -fsS -c cookies.txt -H 'content-type: application/json' \
   -d '{"email":"you@example.test","password":"a long dev password"}' \
   http://127.0.0.1:61450/v1/session        # sets the __Host- session cookie
@@ -76,7 +76,7 @@ stored as a SHA-256 digest and its display prefix identifies it in lists.
 
 ## 5. The authenticated call
 
-```sh
+```sh run=quickstart
 curl -fsS -H "Authorization: Bearer $token" \
   "http://127.0.0.1:61450/v1/workspaces/$workspace/hello"
 # {"message":"hello, workspace …","role":"owner"}
@@ -88,8 +88,11 @@ path the load scenario exercises a million times over.
 
 ## 6. Stop, and (optionally) run the gate
 
-```sh
+```sh run=quickstart
 scripts/dev.sh stop
+```
+
+```sh not-run="the copy's whole gate — a CI-scale run, not a docs check"
 scripts/check.sh     # the whole gate as CI runs it: fmt, clippy, tests, drills, pins
 ```
 

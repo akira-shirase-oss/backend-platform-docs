@@ -39,7 +39,7 @@ database pool.
 | `POST /v1/operations/{id}/retry` | Resume a failed or stalled operation — the same operation, never a new blind retry |
 | `GET /v1/operation-counts` | Admission bound: `429 too_many_operations` past the per-project cap |
 
-```sh
+```sh not-run="the control plane is parked; its server is not part of the template suite"
 curl -fsS -X PUT -H "Authorization: Bearer $BP_ADMIN_TOKEN" \
   -H 'content-type: application/json' -H 'Idempotency-Key: req-42' \
   -d '{"databases":["main"],"buckets":["files"],"identity":{"clients":["web"]}}' \

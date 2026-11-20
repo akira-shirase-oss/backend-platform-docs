@@ -11,7 +11,7 @@ as a reviewed diff.
 
 From the Backend Platform repository:
 
-```sh
+```sh not-run="copying runs in the platform repository; --verify builds a scratch copy"
 scripts/copy-template.sh ../my-product myproduct
 STARTER_TEST_DATABASE_URL=... scripts/copy-template.sh ../x x --verify   # prove the copy builds and passes
 ```

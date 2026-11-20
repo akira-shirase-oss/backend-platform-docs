@@ -46,6 +46,7 @@ export default defineConfig({
 						{ label: 'What it is', slug: 'template' },
 						{ label: 'Copying and owning', slug: 'template/copying' },
 						{ label: 'Accounts kit API', slug: 'template/accounts' },
+						{ label: 'Configuration', slug: 'template/configuration' },
 						{ label: 'Operating a copy', slug: 'template/operations' },
 						{ label: 'The evidence kit', slug: 'template/evidence' },
 					],

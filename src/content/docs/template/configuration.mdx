@@ -1,0 +1,88 @@
+---
+title: Configuration
+description: Every STARTER_* variable — listening and connection bounds, request limits, the database pool, health, accounts — and how secrets are carried.
+---
+
+A copy reads its environment at startup through typed configuration: every variable is
+checked at once and one out-of-bounds value stops the server with **every problem
+listed**, not one at a time. The reference file is `deploy/env.example` in the copy —
+installed as `/etc/<name>/env`, root-owned `0644`, holding no secret — and a test keeps
+it in exact step with the code: a variable added on either side fails the build on the
+other.
+
+## Listening and connection bounds
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `STARTER_LISTEN` | `127.0.0.1:61450` | Loopback only — Caddy terminates TLS in front |
+| `STARTER_HEADER_READ_TIMEOUT_MS` | `10000` | Time for a request head; also the keep-alive idle timeout |
+| `STARTER_MAX_CONNECTIONS` | `512` | Connections served at once; keep below `LimitNOFILE` less the pool |
+| `STARTER_WRITE_STALL_MS` | `10000` | A response write that makes no progress closes its connection |
+| `STARTER_MAX_REQUESTS_PER_CONNECTION` | `1000` | This many requests on one connection answers `Connection: close` |
+| `STARTER_CONNECTION_MAX_AGE_MS` | `600000` | An older connection finishes its request in flight and closes |
+| `STARTER_REQUEST_GRACE_MS` | `10000` | How long an aged connection may take to finish |
+| `STARTER_DRAIN_TIMEOUT_MS` | `15000` | How long shutdown waits; keep below the unit's `TimeoutStopSec` |
+
+## Requests
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `STARTER_REQUEST_TIMEOUT_MS` | `5000` | The whole request, body included; past it `503` |
+| `STARTER_MAX_BODY_BYTES` | `65536` | Request body size |
+| `STARTER_MAX_IN_FLIGHT` | `64` | `/v1` requests running at once; past it `503 overloaded` at once |
+
+## Database
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `STARTER_DB_MAX_CONNECTIONS` | `16` | The pool |
+| `STARTER_DB_ACQUIRE_TIMEOUT_MS` | `2000` | Waiting for a pooled connection |
+| `STARTER_DB_STATEMENT_TIMEOUT_MS` | `3000` | Any statement |
+| `STARTER_READY_TIMEOUT_MS` | `500` | The `/readyz` probe's deadline |
+| `STARTER_STARTUP_TIMEOUT_MS` | `30000` | How long startup waits for the database before giving up |
+
+## Health and logs
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `STARTER_ERROR_RATE_PERMILLE` | `50` | `/errorz` answers 503 past this many errors per thousand requests over five minutes |
+| `STARTER_ERROR_MIN_REQUESTS` | `20` | …once at least this many requests were answered |
+| `STARTER_LOG` | `info` | Level |
+| `STARTER_LOG_FORMAT` | `json` | `json` for journald, `text` for a terminal |
+
+## Accounts
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `STARTER_SMTP_RELAY` | *(empty)* | A loopback SMTP relay that forwards over TLS; empty disables mail |
+| `STARTER_MAIL_FROM` | `accounts@localhost` | The `From` address |
+| `STARTER_PUBLIC_URL` | `http://127.0.0.1:61450` | Where links in emails point — the copy's real address in production |
+| `STARTER_COOKIE_SECURE` | `true` | The session cookie's `Secure` flag |
+| `STARTER_SESSION_TTL_S` | `604800` | A session's maximum age |
+| `STARTER_SESSION_IDLE_S` | `86400` | A session's idle window |
+| `STARTER_TRUSTED_PROXIES` | *(empty)* | On this host Caddy is `127.0.0.1`, so sign-in budgets key on the client, not on Caddy |
+| `STARTER_PASSWORD_CONCURRENCY` | `2` | Argon2 jobs at once; past the wait `503 overloaded` |
+| `STARTER_PLAN_MAX_MEMBERS` | `10` | The free plan (payments are bypassed) |
+| `STARTER_PLAN_MAX_TOKENS` | `10` | " |
+| `STARTER_PLAN_MAX_OWNED_WORKSPACES` | `3` | " |
+
+## Secrets — never in the environment file
+
+The unit loads secrets as systemd credentials (`LoadCredential=`, root-only `0600` files);
+the server reads `$CREDENTIALS_DIRECTORY/<name>`. Outside systemd, a `*_FILE` variable
+points at an owner-only file instead:
+
+| Credential | Used by |
+|---|---|
+| `database-url` | the server, as the runtime role `starter_app` |
+| `migration-database-url` | `…ctl migrate`, `digests`, `fingerprint`, `prune-events` — as `starter_owner` |
+| `admin-database-url` | `…ctl bootstrap` only |
+| `owner-password`, `app-password` | `…ctl bootstrap` only |
+
+```sh not-run="installed by the operator on the droplet; shown as a shape"
+STARTER_DATABASE_URL_FILE=/etc/starter/credentials/database-url
+STARTER_MIGRATION_DATABASE_URL_FILE=/etc/starter/credentials/migration-database-url
+```
+
+Nothing that runs keeps the administrator's URL: bootstrap uses it to create the owner
+and runtime roles, then it is removed.

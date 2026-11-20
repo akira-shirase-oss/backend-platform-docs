@@ -8,7 +8,7 @@ are public development values, and nothing here is a deployment target.
 
 ## Up, down, reset
 
-```sh
+```sh not-run="operator commands shown as shapes; stack.sh up runs in the quickstart suite"
 scripts/stack.sh up        # PostgreSQL 18 in Docker (compose project backend-platform)
 scripts/stack.sh env       # the development URLs and token the other scripts use
 scripts/stack.sh down
@@ -37,7 +37,7 @@ it out-of-band samples to prove it refuses. The template's ports have the same t
 
 ## The gate
 
-```sh
+```sh not-run="the whole gate — a CI-scale run, not a docs check"
 scripts/check.sh
 ```
 
@@ -49,7 +49,7 @@ fail, and the template's own gate afterward.
 
 ## Load runs
 
-```sh
+```sh not-run="load runs are CI-scale jobs dispatched to hosted runners"
 MODE=smoke scripts/load.sh    # 100,000 requests
 MODE=full  scripts/load.sh    # 1,000,000 — quiet machine only (load average under ~6)
 TOTAL=1000 scripts/load.sh    # a plumbing probe; writes under target/, not perf/results/

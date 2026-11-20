@@ -37,12 +37,19 @@ CI runs the same and stores the built site as an artifact.
   written in after the build)
 - `scripts/` — the build checks CI runs
 
+## Examples are checked
+
+`scripts/snippets.mjs` keeps every fenced block in `src/content/docs` inside a check:
+a `run=SUITE` block executes in one bash session inside a Backend Platform checkout
+(`node scripts/snippets.mjs --repo <checkout>`, CI runs it against the project's `main`
+with Docker), and a block that cannot run in a docs check marks itself `not-run="why"`.
+`--coverage` (in the build job) fails on any unmarked block.
+
 ## Still owed (scaffold's honest gaps)
 
-- The snippets runner that executes every docs example against the project's `main` in CI
-  (the workspace standard; the Colophon docs' `scripts/snippets.mjs` is the reference).
-- The generated API reference (Scalar) once the control API emits its checked-in OpenAPI
-  document — a planned control-plane milestone.
+- The generated API reference: neither the template nor the parked control plane emits an
+  OpenAPI document today, so there is none to publish — the [accounts](/template/accounts/)
+  and [control API](/control-plane/api/) pages are the reference until one exists.
 - llms.txt and Markdown copies of pages, if the project wants them.
-- Cloudflare Pages project and custom domain (the maintainer creates both; `site:` in
-  `astro.config.mjs` then points at the real address).
+- A custom domain, if the maintainer wants one (`site:` in `astro.config.mjs` then
+  points at it).
